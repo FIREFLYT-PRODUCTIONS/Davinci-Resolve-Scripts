@@ -102,8 +102,8 @@ def log(msg):
 
 
 def get_resolve():
-    if "resolve" in dir(__builtins__) or "resolve" in globals():
-        return globals().get("resolve") or __builtins__.get("resolve")
+    if "resolve" in globals():
+        return globals()["resolve"]
     try:
         import DaVinciResolveScript as dvr
         return dvr.scriptapp("Resolve")
@@ -173,7 +173,6 @@ def get_flag_color_for_fps(fps):
                 return color
     # Catch-all fuer 100fps+ falls nicht explizit in der Liste
     last_color, _ = FPS_FLAGS[-1]
-    _, last_fps_list = FPS_FLAGS[-1]
     if fps >= 100.0:
         return last_color
     return None
@@ -217,16 +216,6 @@ def create_source_timeline(media_pool, project, name, clips, width, height, fps,
 
     sorted_clips = sorted(clips, key=get_clip_sort_key)
 
-    # Format via CreateTimelineFromClips-Spec setzen
-    # Statt project.SetSetting() → direkt als Timeline-Spec uebergeben
-    # (SetSetting wird von Resolve nicht immer sofort uebernommen)
-    timeline_spec = {
-        "timelineResolutionWidth":  str(width),
-        "timelineResolutionHeight": str(height),
-        "timelineFrameRate":        fps,
-        "name":                     name,
-    }
-
     media_pool.SetCurrentFolder(target_bin)
 
     # Aufloesung setzen und sofort verifizieren
@@ -268,7 +257,7 @@ def create_source_timeline(media_pool, project, name, clips, width, height, fps,
 
 def apply_clip_colors(source_bin):
     """Setzt Clip-Farben und FPS-Flags fuer alle Clips unter source_bin."""
-    log("[1/2] Clip-Farben und FPS-Flags setzen ...")
+    log("[1/3] Clip-Farben und FPS-Flags setzen ...")
     total_colored = 0
     total_flagged = 0
 
@@ -444,7 +433,7 @@ def run():
     apply_clip_colors(source_bin)
 
     # Schritt 2: Timelines erstellen
-    log("[2/2] Source-Timelines erstellen ...\n")
+    log("[2/3] Source-Timelines erstellen ...\n")
     total_created = 0
 
     for cam_bin in camera_bins:
@@ -457,8 +446,9 @@ def run():
 
         log(f"Kamera-Bin: '{bin_name}'  ({len(clips)} Clips)")
 
-        landscape_clips = [c for c in clips if get_clip_orientation(c) == "landscape"]
-        portrait_clips  = [c for c in clips if get_clip_orientation(c) == "portrait"]
+        orientations    = {c: get_clip_orientation(c) for c in clips}
+        landscape_clips = [c for c, o in orientations.items() if o == "landscape"]
+        portrait_clips  = [c for c, o in orientations.items() if o == "portrait"]
 
         both = bool(landscape_clips) and bool(portrait_clips)
 
@@ -483,7 +473,7 @@ def run():
             if tl:
                 total_created += 1
 
-        print()
+        log("")
 
     # Projekt-Format zuruecksetzen auf 4K 23.976
     project.SetSetting("timelineResolutionWidth",  "3840")
