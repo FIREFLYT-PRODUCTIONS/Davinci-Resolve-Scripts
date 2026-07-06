@@ -137,8 +137,18 @@ def get_resolve():
     return None
 
 
-def get_clip_orientation(clip):
-    props = clip.GetClipProperty()
+def get_clip_props(clip, props_cache):
+    """Liest clip.GetClipProperty() genau einmal pro Clip aus (teurer IPC-Call
+    an Resolve) und cached das Ergebnis, damit Orientation/FPS/Sort-Key sich
+    denselben Fetch teilen statt ihn jeweils einzeln zu wiederholen."""
+    key = id(clip)
+    if key not in props_cache:
+        props_cache[key] = clip.GetClipProperty() or {}
+    return props_cache[key]
+
+
+def get_clip_orientation(clip, props_cache):
+    props = get_clip_props(clip, props_cache)
     if not props:
         return "landscape"
     resolution = props.get("Resolution", "")
@@ -160,9 +170,9 @@ def get_clip_orientation(clip):
 
 
 
-def get_clip_fps(clip):
+def get_clip_fps(clip, props_cache):
     """Liest die FPS eines Clips aus den Metadaten."""
-    props = clip.GetClipProperty()
+    props = get_clip_props(clip, props_cache)
     if not props:
         return None
     for key in ["FPS", "Video Frame Rate", "Frame Rate"]:
@@ -191,8 +201,8 @@ def get_flag_color_for_fps(fps):
     return None
 
 
-def get_clip_sort_key(clip):
-    props = clip.GetClipProperty()
+def get_clip_sort_key(clip, props_cache):
+    props = get_clip_props(clip, props_cache)
     if props:
         for key in ["Date Recorded", "Date Modified", "Date Created", "Start TC"]:
             val = props.get(key, "")
@@ -270,13 +280,13 @@ def get_all_timelines(project):
     return names
 
 
-def create_source_timeline(media_pool, project, name, clips, width, height, fps, target_bin):
+def create_source_timeline(media_pool, project, name, clips, width, height, fps, target_bin, props_cache):
     existing = get_all_timelines(project)
     if name in existing:
         log(f"  ~ '{name}' existiert bereits – uebersprungen.")
         return None
 
-    sorted_clips = sorted(clips, key=get_clip_sort_key)
+    sorted_clips = sorted(clips, key=lambda c: get_clip_sort_key(c, props_cache))
 
     media_pool.SetCurrentFolder(target_bin)
 
@@ -317,7 +327,7 @@ def create_source_timeline(media_pool, project, name, clips, width, height, fps,
 
 
 
-def apply_clip_colors(camera_bin_entries):
+def apply_clip_colors(camera_bin_entries, props_cache):
     """Setzt Clip-Farben und FPS-Flags fuer alle entdeckten Kamera-Bins."""
     log("[1/3] Clip-Farben und FPS-Flags setzen ...")
     total_colored = 0
@@ -335,7 +345,7 @@ def apply_clip_colors(camera_bin_entries):
                 total_colored += 1
 
             # FPS-Flag setzen
-            fps = get_clip_fps(clip)
+            fps = get_clip_fps(clip, props_cache)
             flag_color = get_flag_color_for_fps(fps)
             if flag_color:
                 clip.AddFlag(flag_color)
@@ -487,8 +497,12 @@ def run():
     log(f"Source-Ordner gefunden: '{SOURCE_BIN_NAME}'")
     log(f"{len(camera_bin_entries)} Kamera-Bin(s) mit Clips gefunden (rekursiv)\n")
 
+    # Cache fuer clip.GetClipProperty() - pro Clip nur einmal abgerufen statt
+    # separat fuer Farben/FPS-Flags, Orientation und Sortierung.
+    props_cache = {}
+
     # Schritt 1: Clip-Farben setzen
-    apply_clip_colors(camera_bin_entries)
+    apply_clip_colors(camera_bin_entries, props_cache)
 
     # Namen fuer gleichnamige Kamera-Bins an verschiedenen Tagen disambiguieren
     assign_display_names(camera_bin_entries, source_bin.GetName())
@@ -504,8 +518,8 @@ def run():
 
         log(f"Kamera-Bin: '{bin_name}'  ({len(clips)} Clips)")
 
-        landscape_clips = [c for c in clips if get_clip_orientation(c) == "landscape"]
-        portrait_clips  = [c for c in clips if get_clip_orientation(c) == "portrait"]
+        landscape_clips = [c for c in clips if get_clip_orientation(c, props_cache) == "landscape"]
+        portrait_clips  = [c for c in clips if get_clip_orientation(c, props_cache) == "portrait"]
 
         both = bool(landscape_clips) and bool(portrait_clips)
 
@@ -516,7 +530,7 @@ def run():
             tl_name = f"{bin_name} - HORIZONTAL" if both else bin_name
             tl = create_source_timeline(
                 media_pool, project, tl_name, landscape_clips,
-                LANDSCAPE_WIDTH, LANDSCAPE_HEIGHT, FPS, cam_bin
+                LANDSCAPE_WIDTH, LANDSCAPE_HEIGHT, FPS, cam_bin, props_cache
             )
             if tl:
                 total_created += 1
@@ -525,7 +539,7 @@ def run():
             tl_name = f"{bin_name} - VERTICAL" if both else bin_name
             tl = create_source_timeline(
                 media_pool, project, tl_name, portrait_clips,
-                PORTRAIT_WIDTH, PORTRAIT_HEIGHT, FPS, cam_bin
+                PORTRAIT_WIDTH, PORTRAIT_HEIGHT, FPS, cam_bin, props_cache
             )
             if tl:
                 total_created += 1
