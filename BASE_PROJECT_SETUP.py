@@ -15,6 +15,7 @@ USAGE (Resolve Console):
 
 import sys
 from datetime import datetime
+from collections import Counter
 
 
 # ─────────────────────────────────────────────
@@ -92,6 +93,17 @@ COLOR_GROUP_RULES = [
     ]},
 ]
 
+# Ordnernamen, die beim rekursiven Scan komplett uebersprungen werden
+# (Gross-/Kleinschreibung egal, exakter Ordnername - kein Substring-Match).
+#   PHOTOS/AUDIO -> keine Timelines, keine Farben, keine Flags fuer Fotos/Audio.
+#   PROXY        -> Unterordner mit Proxy-Medien derselben Kamera, keine eigene Kamera.
+SKIP_FOLDER_NAMES = {"PHOTOS", "AUDIO", "PROXY"}
+
+# Ordnernamen, die bei der Timeline-Namens-Disambiguierung ignoriert werden,
+# weil sie strukturell sind (z.B. zwei "SONY FX3"-Bins an verschiedenen Tagen
+# sollen nach dem Datumsordner unterschieden werden, nicht nach "VIDEOS").
+STRUCTURAL_ANCESTOR_NAMES = {"VIDEOS", "AUDIO", "PHOTOS", "PROXY"}
+
 
 # ─────────────────────────────────────────────
 #  HILFSFUNKTIONEN
@@ -102,8 +114,8 @@ def log(msg):
 
 
 def get_resolve():
-    if "resolve" in globals():
-        return globals()["resolve"]
+    if "resolve" in dir(__builtins__) or "resolve" in globals():
+        return globals().get("resolve") or __builtins__.get("resolve")
     try:
         import DaVinciResolveScript as dvr
         return dvr.scriptapp("Resolve")
@@ -173,6 +185,7 @@ def get_flag_color_for_fps(fps):
                 return color
     # Catch-all fuer 100fps+ falls nicht explizit in der Liste
     last_color, _ = FPS_FLAGS[-1]
+    _, last_fps_list = FPS_FLAGS[-1]
     if fps >= 100.0:
         return last_color
     return None
@@ -196,6 +209,55 @@ def find_bin_by_name(folder, name):
         if result:
             return result
     return None
+
+
+def find_camera_bins(folder, ancestry=None):
+    """Rekursiv: liefert alle Bins mit >=1 Clip unter `folder`.
+    Ueberspringt komplett Unterordner aus SKIP_FOLDER_NAMES
+    (PHOTOS/AUDIO -> keine Timelines/Farben; PROXY -> keine eigene Kamera).
+    Kein festes Tiefenlimit - funktioniert flach (SOURCE/CAMERA) und
+    verschachtelt (SOURCE/DATE/VIDEOS/CAMERA) gleichermassen."""
+    if ancestry is None:
+        ancestry = []
+
+    results = []
+    clips = folder.GetClipList() or []
+    if clips:
+        results.append({
+            "bin": folder,
+            "name": folder.GetName(),
+            "clips": clips,
+            "ancestry": list(ancestry),
+        })
+
+    for sub in (folder.GetSubFolderList() or []):
+        if sub.GetName().strip().upper() in SKIP_FOLDER_NAMES:
+            continue
+        results.extend(find_camera_bins(sub, ancestry + [folder.GetName()]))
+
+    return results
+
+
+def assign_display_names(camera_bin_entries, source_bin_name):
+    """Setzt entry['display_name'] fuer jeden Eintrag. Eindeutige
+    Kamera-Namen bleiben unveraendert; bei Kollisionen (z.B. 'SONY FX3'
+    an mehreren Aufnahmetagen) wird der naechste nicht-strukturelle
+    Vorfahre (i.d.R. der Datumsordner) vorangestellt."""
+    counts = Counter(e["name"] for e in camera_bin_entries)
+    exclude = STRUCTURAL_ANCESTOR_NAMES | {source_bin_name.strip().upper()}
+    fallback = Counter()
+
+    for e in camera_bin_entries:
+        if counts[e["name"]] == 1:
+            e["display_name"] = e["name"]
+            continue
+
+        tag_segments = [s for s in e["ancestry"] if s.strip().upper() not in exclude]
+        if tag_segments:
+            e["display_name"] = f"{tag_segments[-1]} {e['name']}"
+        else:
+            fallback[e["name"]] += 1
+            e["display_name"] = f"{e['name']} ({fallback[e['name']]})"
 
 
 def get_all_timelines(project):
@@ -255,20 +317,16 @@ def create_source_timeline(media_pool, project, name, clips, width, height, fps,
 
 
 
-def apply_clip_colors(source_bin):
-    """Setzt Clip-Farben und FPS-Flags fuer alle Clips unter source_bin."""
+def apply_clip_colors(camera_bin_entries):
+    """Setzt Clip-Farben und FPS-Flags fuer alle entdeckten Kamera-Bins."""
     log("[1/3] Clip-Farben und FPS-Flags setzen ...")
     total_colored = 0
     total_flagged = 0
 
-    for cam_bin in source_bin.GetSubFolderList():
-        bin_name = cam_bin.GetName()
+    for entry in camera_bin_entries:
+        bin_name = entry["name"]
         color    = CLIP_COLORS.get(bin_name)
-        clips    = cam_bin.GetClipList()
-
-        if not clips:
-            log(f"  - '{bin_name}' ist leer.")
-            continue
+        clips    = entry["clips"]
 
         for clip in clips:
             # Clip Color setzen
@@ -421,34 +479,33 @@ def run():
         log(f"FEHLER: Source-Ordner '{SOURCE_BIN_NAME}' nicht gefunden.")
         return
 
-    camera_bins = source_bin.GetSubFolderList()
-    if not camera_bins:
-        log(f"Keine Unterbins in '{SOURCE_BIN_NAME}' gefunden.")
+    camera_bin_entries = find_camera_bins(source_bin)
+    if not camera_bin_entries:
+        log(f"Keine Kamera-Bins mit Clips unter '{SOURCE_BIN_NAME}' gefunden.")
         return
 
     log(f"Source-Ordner gefunden: '{SOURCE_BIN_NAME}'")
-    log(f"{len(camera_bins)} Kamera-Bin(s) gefunden\n")
+    log(f"{len(camera_bin_entries)} Kamera-Bin(s) mit Clips gefunden (rekursiv)\n")
 
     # Schritt 1: Clip-Farben setzen
-    apply_clip_colors(source_bin)
+    apply_clip_colors(camera_bin_entries)
+
+    # Namen fuer gleichnamige Kamera-Bins an verschiedenen Tagen disambiguieren
+    assign_display_names(camera_bin_entries, source_bin.GetName())
 
     # Schritt 2: Timelines erstellen
     log("[2/3] Source-Timelines erstellen ...\n")
     total_created = 0
 
-    for cam_bin in camera_bins:
-        bin_name = cam_bin.GetName()
-        clips    = cam_bin.GetClipList()
-
-        if not clips:
-            log(f"– '{bin_name}' ist leer, uebersprungen.\n")
-            continue
+    for entry in camera_bin_entries:
+        cam_bin  = entry["bin"]
+        clips    = entry["clips"]
+        bin_name = entry["display_name"]
 
         log(f"Kamera-Bin: '{bin_name}'  ({len(clips)} Clips)")
 
-        orientations    = {c: get_clip_orientation(c) for c in clips}
-        landscape_clips = [c for c, o in orientations.items() if o == "landscape"]
-        portrait_clips  = [c for c, o in orientations.items() if o == "portrait"]
+        landscape_clips = [c for c in clips if get_clip_orientation(c) == "landscape"]
+        portrait_clips  = [c for c in clips if get_clip_orientation(c) == "portrait"]
 
         both = bool(landscape_clips) and bool(portrait_clips)
 
@@ -473,7 +530,7 @@ def run():
             if tl:
                 total_created += 1
 
-        log("")
+        print()
 
     # Projekt-Format zuruecksetzen auf 4K 23.976
     project.SetSetting("timelineResolutionWidth",  "3840")
