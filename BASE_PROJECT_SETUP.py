@@ -14,6 +14,7 @@ USAGE (Resolve Console):
 """
 
 import sys
+import time
 from datetime import datetime
 from collections import Counter
 
@@ -31,6 +32,13 @@ PORTRAIT_HEIGHT  = 3840
 FPS              = "23.976"
 
 PORTRAIT_THRESHOLD = 1.0
+
+# AppendToTimeline() schlaegt gelegentlich transient fehl (Race Condition:
+# die frisch erstellte Timeline ist im Resolve-internen State noch nicht
+# vollstaendig als "aktuelle Timeline" gesetzt). Bei Fehlschlag wird kurz
+# gewartet und erneut versucht, bevor endgueltig aufgegeben wird.
+APPEND_MAX_ATTEMPTS = 3
+APPEND_RETRY_DELAY_SEC = 1.0
 
 # Clip-Farben pro Bin  –  hier anpassen und erweitern
 # Verfuegbare Farben: Orange, Apricot, Yellow, Lime, Olive, Green,
@@ -317,11 +325,20 @@ def create_source_timeline(media_pool, project, name, clips, width, height, fps,
 
     log(f"  ✓ '{name}' erstellt ({width}x{height} @ {fps}fps)")
 
-    result = media_pool.AppendToTimeline(sorted_clips)
+    result = None
+    for attempt in range(1, APPEND_MAX_ATTEMPTS + 1):
+        result = media_pool.AppendToTimeline(sorted_clips)
+        if result:
+            break
+        if attempt < APPEND_MAX_ATTEMPTS:
+            log(f"    ~ Einfuegen fehlgeschlagen (Versuch {attempt}/{APPEND_MAX_ATTEMPTS}), "
+                f"erneuter Versuch in {APPEND_RETRY_DELAY_SEC}s ...")
+            time.sleep(APPEND_RETRY_DELAY_SEC)
+
     if result:
         log(f"    → {len(sorted_clips)} Clips eingefuegt (nach Aufnahmezeit sortiert)")
     else:
-        log(f"    ! Clips konnten nicht eingefuegt werden")
+        log(f"    ! Clips konnten nicht eingefuegt werden (nach {APPEND_MAX_ATTEMPTS} Versuchen)")
 
     return timeline
 
