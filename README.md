@@ -50,14 +50,16 @@ Die Kamera kommt aus den Metadaten der Datei, das Bildprofil pro Clip. Neue Kame
 | Sony A7IV | Yellow (A7IV-2: Lime) | wie FX3 |
 | Sony A7V | Green | wie FX3 |
 | DJI Mavic 3 Pro | Tan | Hasselblad `D-LOG`, Tele `D-LOG M` |
-| DJI Mavic 4 Pro | Brown | `D-LOG M` |
+| DJI Mavic 4 Pro | Brown | `D-LOG M`, bei gemessen sehr flachem Bild `D-LOG` |
 | DJI Mini 4 Pro | Beige | `D-LOG M` |
 | DJI Mini 5 Pro | Chocolate | `D-LOG M` |
 | DJI Avata 2 | Olive | `D-LOG M` |
 | GoPro HERO 11 | Navy | `GP-LOG` nur bei GP-Log, Flat und Standard ohne |
 | GoPro HERO 13 | Teal | wie HERO 11 |
 
-DJI schreibt das Farbprofil nicht lesbar in die Datei. Erreicht mindestens ein Viertel der Clips einer Kamera das hellste Weiß, gilt sie im Shoot als nicht in Log gefilmt: keine Gruppe, dafür ein Hinweis. Dafür braucht es `ffmpeg` auf dem Rechner, ohne wird nicht gemessen.
+DJI schreibt das Farbprofil nicht lesbar in die Datei. Die Mavic 3 kann D-Log nur auf der Hasselblad, das Objektiv steht in der Datei. Bei der Mavic 4 können alle Kameras D-Log, deshalb wird pro Objektiv gemessen: Liegt das hellste Weiß im Median unter 780 (10 Bit), gilt es als D-Log, sonst als D-Log M. Der Wert stammt von der Mavic 3, mit echtem D-Log der Mavic 4 ist er noch nicht geprüft.
+
+Erreicht mindestens ein Viertel der Clips einer Drohne das hellste Weiß, kommt ein Hinweis, die Gruppe bleibt aber. Für beide Messungen braucht es `ffmpeg`; ohne bleibt es beim Standard.
 
 FPS-Flags: Green bis 30 fps, Yellow bis 99 fps, Red ab 100 fps.
 

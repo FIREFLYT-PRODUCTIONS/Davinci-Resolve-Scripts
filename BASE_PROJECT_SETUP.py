@@ -100,9 +100,12 @@ EXTRA_GROUPS = {
 }
 
 # DJI schreibt das Farbprofil nicht lesbar in die Datei. Deshalb wird gemessen, aber
-# nur ueber alle Clips eines Bins, denn ein einzelnes Bild sagt zu wenig: Log erreicht
-# das hellste Weiss praktisch nie. Tut das ein Viertel der Clips, war es kein Log.
-DJI_NORMAL_YMAX = 975    # 10 Bit
+# nur ueber mehrere Clips, denn ein einzelnes Bild sagt zu wenig (Werte in 10 Bit).
+# Mavic 4: Alle Kameras koennen D-Log. Echtes D-Log ist sehr flach, bei der
+# Mavic 3 Hasselblad liegt das Weiss im Median bei rund 700, bei D-Log M um 900.
+DJI_DLOG_YMAX = 780
+# Erreicht ein Viertel der Clips das hellste Weiss, war es womoeglich kein Log: nur Hinweis
+DJI_NORMAL_YMAX = 975
 DJI_NORMAL_SHARE = 0.25
 
 # Pro Clip werden nur Anfang und Ende gelesen, das reicht auch bei 11-GB-Dateien
@@ -309,8 +312,8 @@ def read_file_ends(path):
     return data
 
 
-def dji_clip_reaches_white(path):
-    """True, wenn das hellste Weiss erreicht wird. None, wenn nicht messbar
+def dji_clip_ymax(path):
+    """Hellster Wert eines Bildes in 10 Bit. None, wenn nicht messbar
     (kein ffmpeg auf dem Rechner, Clip zu kurz oder defekt)."""
     if not shutil.which("ffmpeg"):
         return None
@@ -328,7 +331,7 @@ def dji_clip_reaches_white(path):
     if not ymax:
         return None
     high = float(ymax.group(1))
-    return high <= 255 or high > DJI_NORMAL_YMAX  # 8 Bit gibt es bei DJI nur ohne Log
+    return high * 4 if high <= 255 else high  # 8-Bit-Clips auf 10 Bit umrechnen
 
 
 def read_clip_meta(path):
@@ -365,27 +368,43 @@ def read_clip_meta(path):
 
     camera = meta["camera"] or ""
     if camera.startswith("DJI"):
+        lens = re.search(rb"(Hasselblad [A-Z0-9\-]+|DJI FC[0-9A-Za-z]+)", data)
+        meta["lens"] = lens.group(1).decode("latin-1") if lens else "?"
+        # Mavic 3: D-Log gibt es nur auf der Hasselblad. Mavic 4 entscheidet die Messung.
         meta["group"] = "D-LOG" if camera == "DJI MAVIC 3 PRO" and b"Hasselblad" in data else "D-LOG M"
     return meta
 
 
 def check_dji_bins(camera_bin_entries, jobs, clip_meta, pool):
-    """Nimmt DJI-Bins ohne Log aus den Gruppen, damit die LUT das Bild nicht verfaerbt."""
+    """Misst die DJI-Clips pro Bin: erkennt echtes D-Log der Mavic 4 und warnt,
+    wenn eine Kamera nicht nach Log aussieht. Die Gruppe bleibt dabei erhalten."""
     paths = {clip.GetUniqueId(): path for clip, path in jobs}
     for entry in camera_bin_entries:
         ids = [c.GetUniqueId() for c in entry["clips"]]
         ids = [i for i in ids if (clip_meta[i].get("camera") or "").startswith("DJI")]
         if not ids:
             continue
-        measured = [r for r in pool.map(dji_clip_reaches_white, [paths[i] for i in ids]) if r is not None]
-        if not measured:
+        values = dict(zip(ids, pool.map(dji_clip_ymax, [paths[i] for i in ids])))
+        values = {i: v for i, v in values.items() if v is not None}
+        if not values:
             continue
-        share = sum(measured) / len(measured)
-        if share >= DJI_NORMAL_SHARE:
-            log(f"  '{entry['name']}': {sum(measured)} von {len(measured)} Clips mit vollem Kontrast, kein Log")
+
+        by_lens = {}
+        for i, value in values.items():
+            if clip_meta[i]["camera"] == "DJI MAVIC 4 PRO":
+                by_lens.setdefault(clip_meta[i].get("lens"), []).append(i)
+        for lens, lens_ids in by_lens.items():
+            levels = sorted(values[i] for i in lens_ids)
+            if levels[len(levels) // 2] < DJI_DLOG_YMAX:
+                log(f"  '{entry['name']}' {lens}: {len(lens_ids)} Clips sehr flach, D-LOG")
+                for i in lens_ids:
+                    clip_meta[i]["group"] = "D-LOG"
+
+        white = sum(v > DJI_NORMAL_YMAX for v in values.values())
+        if white / len(values) >= DJI_NORMAL_SHARE:
+            log(f"  '{entry['name']}': {white} von {len(values)} Clips mit vollem Kontrast")
             for i in ids:
-                clip_meta[i]["group"] = None
-                clip_meta[i]["note"] = "Drohne wohl nicht in Log gefilmt, keine Color Group"
+                clip_meta[i]["note"] = "Drohne sieht nicht nach Log aus, bitte Profil pruefen"
 
 
 def read_all_clip_meta(camera_bin_entries):
