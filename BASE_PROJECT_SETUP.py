@@ -337,6 +337,10 @@ def dji_clip_ymax(path):
 def read_clip_meta(path):
     """Liefert {'camera', 'group', 'note'} aus den Metadaten der Datei."""
     meta = {"camera": None, "group": None, "note": None}
+    # Bildsequenz (z. B. GoPro-Timelapse): Resolve nennt sie GPAA[0660-1407].JPG, die Datei gibt es so nicht
+    if re.search(r"\[\d+-\d+\]\.\w+$", path) and not os.path.exists(path):
+        meta["no_group_ok"] = True  # Fotos haben kein Log-Profil
+        return meta
     try:
         data = read_file_ends(path)
     except OSError as error:
