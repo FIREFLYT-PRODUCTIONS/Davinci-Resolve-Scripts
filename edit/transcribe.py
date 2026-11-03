@@ -12,15 +12,36 @@ Takes, die schon ein Transkript haben, werden übersprungen.
 """
 
 import argparse
+import os
+import subprocess
 import sys
 import time
 from pathlib import Path
+
+import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import common  # noqa: E402
 
 MIN_WORDS = 5
 MAX_NO_SPEECH = 0.5
+
+
+def add_cuda_dlls():
+    """cuBLAS und cuDNN kommen als pip-Pakete (nvidia-*-cu12), Windows findet deren DLLs sonst nicht."""
+    import importlib.util
+    spec = importlib.util.find_spec("nvidia")
+    for base in (spec.submodule_search_locations if spec else []):
+        for bin_dir in Path(base).glob("*/bin"):
+            os.add_dll_directory(str(bin_dir))
+            os.environ["PATH"] = str(bin_dir) + os.pathsep + os.environ.get("PATH", "")
+
+
+def load_audio(path, sr=16000):
+    """Mono 16 kHz per ffmpeg. faster_whisper selbst nutzt PyAV, das in dieser Version nicht passt."""
+    out = subprocess.run(["ffmpeg", "-v", "error", "-i", str(path), "-vn", "-ac", "1", "-ar", str(sr),
+                          "-f", "f32le", "-"], capture_output=True, creationflags=common.NO_WINDOW)
+    return np.frombuffer(out.stdout, np.float32)
 
 
 def speech_segments(segments):
@@ -50,6 +71,7 @@ def main():
     target = root / "SELECTS" / "transcripts.json"
     done = common.load_json(target)["takes"] if target.exists() else {}
 
+    add_cuda_dlls()
     from faster_whisper import WhisperModel
     started = time.time()
     model = WhisperModel(args.model, device="cuda", compute_type="float16")
@@ -57,7 +79,11 @@ def main():
     log(f"{len(todo)} Takes zu transkribieren, {len(done)} schon fertig")
     for n, take in enumerate(todo, 1):
         source = take["proxy"] or take["file"]
-        raw, _ = model.transcribe(source, language=args.language, vad_filter=True,
+        audio = load_audio(source)
+        if audio.size < 16000:
+            done[take["file"]] = {"key": take["key"], "speech": False, "segments": []}
+            continue
+        raw, _ = model.transcribe(audio, language=args.language, vad_filter=True,
                                   word_timestamps=True, condition_on_previous_text=False)
         segments = [{"start": round(s.start, 2), "end": round(s.end, 2), "text": s.text.strip(),
                      "no_speech": round(s.no_speech_prob, 3),
