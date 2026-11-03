@@ -160,16 +160,43 @@ def connect(wait_sec=120):
     raise SetupError("Resolve antwortet nicht. Ist External Scripting auf Local gestellt?")
 
 
+def launch_resolve():
+    log("  Starte Resolve ...")
+    # Ganz losgeloest starten. Erbt Resolve die Ausgabe des Skripts, kann sein
+    # Skript-Server haengen bleiben ("Resolve antwortet nicht").
+    flags = getattr(subprocess, "DETACHED_PROCESS", 0) | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
+    subprocess.Popen([str(RESOLVE_EXE)], cwd=str(RESOLVE_DIR), creationflags=flags, close_fds=True,
+                     stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    time.sleep(10)
+
+
+def kill_main_resolve():
+    """Beendet nur Resolve selbst, nie den Proxy Generator (beide heissen Resolve.exe)."""
+    for pid, is_pg in resolve_processes().items():
+        if not is_pg:
+            subprocess.run(["taskkill", "/PID", str(pid), "/F"], capture_output=True,
+                           creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+    end = time.time() + 60
+    while time.time() < end:
+        if not main_resolve_running():
+            time.sleep(3)
+            return
+        time.sleep(2)
+    raise SetupError("Haengendes Resolve liess sich nicht beenden.")
+
+
 def start_resolve():
-    if not main_resolve_running():
-        log("  Starte Resolve ...")
-        # Ganz losgeloest starten. Erbt Resolve die Ausgabe des Skripts, kann sein
-        # Skript-Server haengen bleiben ("Resolve antwortet nicht").
-        flags = getattr(subprocess, "DETACHED_PROCESS", 0) | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
-        subprocess.Popen([str(RESOLVE_EXE)], cwd=str(RESOLVE_DIR), creationflags=flags, close_fds=True,
-                         stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        time.sleep(10)
-    return connect()
+    if main_resolve_running():
+        return connect()  # vom Nutzer offen, nie selbst beenden
+    launch_resolve()
+    try:
+        return connect()
+    except SetupError:
+        # Selbst gestartet, also ohne offene Arbeit: einmal neu starten
+        log("  Resolve antwortet nicht, starte es einmal neu ...")
+        kill_main_resolve()
+        launch_resolve()
+        return connect()
 
 
 def quit_resolve(resolve):

@@ -11,6 +11,8 @@ Vom kopierten Shoot zum fertigen Resolve-Projekt. Läuft auf Windows.
 
 Bei einem Neukunden wird Resolve einmal beendet und neu gestartet. Der Kundenordner muss dafür schon `00 - DAVINCI RESOLVE PROJECTS` enthalten (Vorlage `00 - CUSTOMER`).
 
+Antwortet ein vom Setup gestartetes Resolve nicht, startet das Setup es einmal selbst neu. Ein Resolve, das schon vorher offen war, beendet es nie.
+
 Am Ende gibt es:
 
 - die Kunden-Library in Resolve (`NN - KUNDE` bzw. `NN - KUNDE - FELIX`)
