@@ -72,7 +72,7 @@ def fps_value(text):
 def probe(path):
     out = subprocess.run(
         ["ffprobe", "-v", "error", "-show_entries",
-         "stream=codec_type,width,height,r_frame_rate,nb_frames:format=duration",
+         "stream=codec_type,width,height,r_frame_rate,nb_frames:stream_side_data=rotation:format=duration",
          "-of", "json", str(path)],
         capture_output=True, text=True, creationflags=NO_WINDOW,
     )
@@ -82,6 +82,11 @@ def probe(path):
     for stream in data.get("streams", []):
         if stream.get("codec_type") == "video" and info["width"] is None:
             info["width"], info["height"] = stream.get("width"), stream.get("height")
+            # Hochkant-Clips der Sony liegen quer mit Drehung 90 in der Datei, ffmpeg dreht beim Lesen
+            rotation = next((abs(int(s.get("rotation", 0))) for s in stream.get("side_data_list", [])
+                             if "rotation" in s), 0)
+            if rotation in (90, 270):
+                info["width"], info["height"] = info["height"], info["width"]
             info["fps"] = fps_value(stream.get("r_frame_rate", "0/1"))
             frames = stream.get("nb_frames")
             info["frames"] = int(frames) if frames and frames.isdigit() else round(info["duration"] * info["fps"])
