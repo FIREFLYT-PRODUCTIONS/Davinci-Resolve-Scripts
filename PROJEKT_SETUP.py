@@ -58,7 +58,9 @@ SCRIPT_LIB   = str(RESOLVE_DIR / "fusionscript.dll")
 APPDATA      = Path(os.environ.get("APPDATA", ""))
 DBLIST       = APPDATA / "Blackmagic Design" / "DaVinci Resolve" / "Preferences" / "dblist.conf"
 PROXY_INI    = APPDATA / "Blackmagic Design" / "Blackmagic Proxy Generator" / "Preferences" / "ProxyGeneratorSettings.ini"
-BACKUP_DIR   = Path(tempfile.gettempdir()) / "fireflyt_projekt_setup"
+# Sicherungen von dblist.conf und INI. Nicht im Temp-Ordner, den raeumt Windows auf.
+BACKUP_DIR   = APPDATA / "FIREFLYT" / "projekt_setup_backups"
+EXPORT_DIR   = Path(tempfile.gettempdir()) / "fireflyt_projekt_setup"
 
 LIBRARY_PARENT  = "00 - DAVINCI RESOLVE PROJECTS"
 SOURCE_DIR_NAME = "01 - SOURCE"
@@ -160,7 +162,11 @@ def connect(wait_sec=120):
 def start_resolve():
     if not main_resolve_running():
         log("  Starte Resolve ...")
-        subprocess.Popen([str(RESOLVE_EXE)], cwd=str(RESOLVE_DIR))
+        # Ganz losgeloest starten. Erbt Resolve die Ausgabe des Skripts, kann sein
+        # Skript-Server haengen bleiben ("Resolve antwortet nicht").
+        flags = getattr(subprocess, "DETACHED_PROCESS", 0) | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
+        subprocess.Popen([str(RESOLVE_EXE)], cwd=str(RESOLVE_DIR), creationflags=flags, close_fds=True,
+                         stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         time.sleep(10)
     return connect()
 
@@ -271,11 +277,29 @@ def find_registered_library(library_dir):
     return None
 
 
+def check_library_name(plan):
+    """Bricht ab, wenn der Name schon fuer einen anderen Pfad registriert ist (z.B. altes Laufwerk)."""
+    if find_registered_library(plan["library_dir"]):
+        return
+    name = plan["library_name"]
+    for line in DBLIST.read_text(encoding="utf-8").splitlines():
+        parts = line.split(":")
+        if parts[0] == name:
+            path = parts[1] if len(parts) > 1 else "?"
+            raise SetupError(f"Die Library '{name}' ist in Resolve mit einem anderen Pfad "
+                             f"registriert ({path}). Bitte in Resolve pruefen.")
+
+
 def register_library(name, library_dir):
     saved = backup(DBLIST)
     log(f"  Sicherung der Library-Liste: {saved}")
+    # Ohne Zeilenende am Schluss wuerde der neue Eintrag an den letzten angehaengt
+    ends_clean = DBLIST.read_bytes().endswith(b"\n") or DBLIST.stat().st_size == 0
     with open(DBLIST, "a", encoding="utf-8", newline="") as handle:
-        handle.write(f"{name}:{dblist_path(library_dir)}::::DISK\r\n")
+        handle.write(("" if ends_clean else "\r\n") + f"{name}:{dblist_path(library_dir)}::::DISK\r\n")
+    if find_registered_library(library_dir) != name:
+        shutil.copy2(saved, DBLIST)
+        raise SetupError("Library-Eintrag liess sich nicht pruefen, Library-Liste zurueckgesetzt.")
 
 
 def ensure_library(plan):
@@ -283,6 +307,7 @@ def ensure_library(plan):
     library_dir = plan["library_dir"]
     resolve_projects = library_dir / "Resolve Projects"
     fresh = False
+    check_library_name(plan)
 
     if not resolve_projects.is_dir():
         log(f"  Neue Library aus dem Template: {library_dir}")
@@ -297,10 +322,6 @@ def ensure_library(plan):
         return name, fresh
 
     name = plan["library_name"]
-    known = [line.split(":")[0] for line in DBLIST.read_text(encoding="utf-8").splitlines()]
-    if name in known:
-        raise SetupError(f"Eine Library '{name}' gibt es schon mit einem anderen Pfad. "
-                         "Bitte in Resolve pruefen.")
     if main_resolve_running():
         quit_resolve(connect())
     register_library(name, library_dir)
@@ -318,8 +339,8 @@ def switch_library(pm, name):
 
 def export_template(pm):
     switch_library(pm, TEMPLATE_LIBRARY)
-    BACKUP_DIR.mkdir(parents=True, exist_ok=True)
-    drp = BACKUP_DIR / f"BASE_{datetime.now():%Y%m%d_%H%M%S}.drp"
+    EXPORT_DIR.mkdir(parents=True, exist_ok=True)
+    drp = EXPORT_DIR / f"BASE_{datetime.now():%Y%m%d_%H%M%S}.drp"
     if not pm.ExportProject(TEMPLATE_PROJECT, str(drp), True) or not drp.exists():
         raise SetupError("Template-Projekt liess sich nicht exportieren.")
     return drp
@@ -360,7 +381,10 @@ def create_project(pm, plan, library_name, fresh, resume):
         log(f"  Vorhandenes Projekt wird ergaenzt: {name}")
         return open_existing_project(pm, name, folders)
 
-    if fresh and TEMPLATE_PROJECT in existing:
+    # Frische Template-Kopie, auch nach einem Abbruch direkt nach dem Anlegen
+    only_template = existing == [TEMPLATE_PROJECT] and not pm.GetFolderListInCurrentFolder()
+    if (fresh or only_template) and TEMPLATE_PROJECT in existing:
+        log(f"  Template-Kopie wird zum Projekt: {name}")
         project = pm.LoadProject(TEMPLATE_PROJECT)
         if not project or not project.SetName(name):
             raise SetupError("Base-Projekt liess sich nicht umbenennen.")
@@ -688,6 +712,7 @@ def run(args):
         log(f"! Leere Dateien, werden uebersprungen ({len(plan['empty'])}): {names}")
         warnings.append(f"Leere Dateien uebersprungen, Kopie pruefen: {names}")
 
+    check_library_name(plan)
     registered = find_registered_library(plan["library_dir"])
     has_library = (plan["library_dir"] / "Resolve Projects").is_dir()
     log(f"Library: {registered or plan['library_name']} "

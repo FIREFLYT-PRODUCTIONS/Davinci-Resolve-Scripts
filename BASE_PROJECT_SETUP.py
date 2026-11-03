@@ -511,12 +511,11 @@ def apply_clip_colors(camera_bin_entries, props_cache, clip_meta):
                 clip.SetClipColor(color)
                 total_colored += 1
 
-            # FPS-Flag setzen
+            # FPS-Flag setzen. Clips mit Flags hat schon jemand markiert, die bleiben.
             fps = get_clip_fps(clip, props_cache)
             flag_color = get_flag_color_for_fps(fps)
-            if flag_color:
-                if flag_color not in (clip.GetFlagList() or []):
-                    clip.AddFlag(flag_color)
+            if flag_color and not clip.GetFlagList():
+                clip.AddFlag(flag_color)
                 total_flagged += 1
 
         names = ", ".join(str(name) for name in cameras)
@@ -566,6 +565,11 @@ def assign_color_groups(project, source_timelines, clip_meta, result):
                 group_name = meta.get("group")
                 if meta.get("note"):
                     result["notes"].append(f"{item.GetName()}: {meta['note']}")
+                # Eine vorhandene Gruppe hat jemand bewusst gesetzt, sie bleibt
+                current = item.GetColorGroup()
+                if current:
+                    counts[current.GetName()] += 1
+                    continue
                 group = group_map.get(group_name)
                 if group and item.AssignToColorGroup(group):
                     total_assigned += 1
@@ -628,6 +632,11 @@ def run():
     # Namen fuer gleichnamige Kamera-Bins an verschiedenen Tagen disambiguieren
     assign_display_names(camera_bin_entries, source_bin.GetName())
 
+    # Die Timelines brauchen eigene Formate, danach kommt das alte Projektformat zurueck.
+    # Sonst aendern sich vorhandene Timelines ohne eigene Einstellungen mit.
+    project_format = {key: project.GetSetting(key) for key in
+                      ("timelineResolutionWidth", "timelineResolutionHeight", "timelineFrameRate")}
+
     # Schritt 2: Timelines erstellen
     log("[2/3] Source-Timelines erstellen ...\n")
     total_created = 0
@@ -670,10 +679,10 @@ def run():
 
         print()
 
-    # Projekt-Format zuruecksetzen auf 4K 23.976
-    project.SetSetting("timelineResolutionWidth",  "3840")
-    project.SetSetting("timelineResolutionHeight", "2160")
-    project.SetSetting("timelineFrameRate",        FPS)
+    # Projekt-Format zuruecksetzen auf den Stand vor dem Lauf
+    for key, value in project_format.items():
+        if value and project.GetSetting(key) != value:
+            project.SetSetting(key, value)
 
     # Schritt 3: Color Groups zuweisen
     assign_color_groups(project, source_timelines, clip_meta, result)
