@@ -683,7 +683,7 @@ def start_proxies(plan, warnings):
 # ─────────────────────────────────────────────
 
 def write_log(plan):
-    target = plan["project_dir"] / f"00 - {plan['editor']}" / "PROJECT"
+    target = plan["project_dir"] / f"00 - {plan['editor']}" / "CLAUDE" / "LOGS"
     try:
         target.mkdir(parents=True, exist_ok=True)
         (target / f"PROJEKT_SETUP_{datetime.now():%Y%m%d_%H%M%S}.log").write_text(

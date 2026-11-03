@@ -19,7 +19,7 @@ Am Ende gibt es:
 - Color Groups pro Clip und den `BASE NODE TREE` auf allen Clips
 - den laufenden Proxy Generator. Er rechnet im Hintergrund weiter und bleibt offen, mit den Originaldateien kann sofort gearbeitet werden. Fertige Proxys verknüpft Resolve selbst.
 
-Das Log liegt im Projektordner unter `00 - CONRAD\PROJECT` bzw. `00 - FELIX\PROJECT`.
+Das Log liegt im Projektordner unter `00 - CONRAD\CLAUDE\LOGS` bzw. `00 - FELIX\CLAUDE\LOGS`.
 
 Läuft der Generator schon für einen anderen Shoot, wird er nicht angefasst: Das Setup läuft durch und nennt den Ordner, der dort mit **Add** hinzuzufügen ist.
 
