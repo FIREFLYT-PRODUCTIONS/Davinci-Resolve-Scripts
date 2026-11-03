@@ -23,7 +23,11 @@ Das Log liegt im Projektordner unter `00 - CONRAD\PROJECT` bzw. `00 - FELIX\PROJ
 
 Läuft der Generator schon für einen anderen Shoot, wird er nicht angefasst: Das Setup läuft durch und nennt den Ordner, der dort mit **Add** hinzuzufügen ist.
 
-Gibt es das Projekt schon, bietet das Fenster an, nur Fehlendes zu ergänzen. Vorhandenes bleibt unverändert. Neue Clips einer Kamera, die schon eine Timeline hat, landen im Bin, aber nicht in der Timeline; das Setup weist darauf hin.
+Gibt es das Projekt schon, bietet das Fenster an, nur Fehlendes zu ergänzen. Vorhandenes bleibt unverändert: Clipfarben, Flags, Color Groups, Grades und das Projektformat werden nicht angefasst. Neue Clips einer Kamera, die schon eine Timeline hat, landen im Bin, aber nicht in der Timeline; das Setup weist darauf hin.
+
+Ist der Library-Name in Resolve schon mit einem anderen Pfad registriert (z.B. altes Laufwerk), bricht schon die Prüfung ab, bevor etwas geändert wird.
+
+Vor jeder Änderung an `dblist.conf` und an der INI des Proxy Generators legt das Setup eine Sicherung an: `%APPDATA%\FIREFLYT\projekt_setup_backups`.
 
 ## Dateien
 
