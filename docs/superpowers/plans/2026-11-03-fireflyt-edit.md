@@ -93,61 +93,61 @@ C:\Users\conra\.claude\skills\fireflyt-edit\references\
 - `resolve_util.apply_look(resolve, project, timeline, items, groups) -> int` (Anzahl mit 17 Nodes)
 - `resolve_util.reload_count(pm, project, timeline_names, track_names) -> (project, total, ok)`
 
-- [ ] Tests für `src_to_record` (59,94 in 23,976: 600 -> +240), `seconds_to_frames`, `claude_dir`
-- [ ] Implementieren, Tests grün, commit
+- [x] Tests für `src_to_record` (59,94 in 23,976: 600 -> +240), `seconds_to_frames`, `claude_dir`
+- [x] Implementieren, Tests grün, commit
 
 ### Task 2: analyse_takes.py
 
 Messung alle 0,25 s auf 320 px Graustufen aus dem Proxy (sonst Original): Schärfe (Laplace-Varianz relativ zum Take und zum Projekt), Bewegung per `cv2.phaseCorrelate` (Reißschwenk = große Verschiebung, Wackler = unruhige Verschiebung), Belichtung relativ zum Take-Median und Anteil ausgebrannter Pixel. Fenster 0,5 s; saubere Abschnitte ab 2 s. Kontaktbild: 4 Takes pro Bild, je Take eine Zeile mit bis zu 6 Bildern aus sauberen Abschnitten, beschriftet mit Key und Sekunde.
 
-- [ ] Tests mit synthetischen Bildern: scharfes Bild ruhig = sauber, Weichzeichner = unscharf, Zitter-Versatz = wackelig, großer Versatz = Schwenk, Segmente unter 2 s entfallen
-- [ ] Implementieren, Tests grün
-- [ ] Lauf am Demo-Projekt, Laufzeit messen (Ziel < 20 Min. für alle Takes), commit
+- [x] Tests mit synthetischen Bildern: scharfes Bild ruhig = sauber, Weichzeichner = unscharf, Zitter-Versatz = wackelig, großer Versatz = Schwenk, Segmente unter 2 s entfallen
+- [x] Implementieren, Tests grün
+- [x] Lauf am Demo-Projekt, Laufzeit messen (Ziel < 20 Min. für alle Takes), commit
 
 ### Task 3: transcribe.py
 
 faster_whisper `large-v3-turbo` auf CUDA, `vad_filter`, Sprache Deutsch, Wortzeiten. Sprache gilt als vorhanden ab 5 Wörtern mit `no_speech_prob < 0.5`.
 
-- [ ] Lauf am Demo-Projekt, Takes mit Sprache prüfen, commit
+- [x] Lauf am Demo-Projekt, Takes mit Sprache prüfen, commit
 
 ### Task 4: place_selects.py + Selects am Demo-Projekt
 
 - Spur `SELECTS` über V1 (vorhanden: wiederverwenden), Platzierung mit `src_to_record`, auf den V1-Clip begrenzt.
 - Takes, die auf `SELECTS` schon Clips haben, überspringen.
 - Look setzen, Neuladen-Kontrolle, Bericht und Log.
-- [ ] Test für Begrenzung und Überspringen (reine Funktion `plan_placements`)
-- [ ] Claude wählt Selects aus den Kontaktbildern (+ Transkript), schreibt `selects.json`
-- [ ] Lauf, Stichprobe 20 Selects in Resolve: richtige Stelle, keine Unschärfe, Look da; zweiter Lauf überspringt alles; commit
+- [x] Test für Begrenzung und Überspringen (reine Funktion `plan_placements`)
+- [x] Claude wählt Selects aus den Kontaktbildern (+ Transkript), schreibt `selects.json`
+- [x] Lauf, Stichprobe 20 Selects in Resolve: richtige Stelle, keine Unschärfe, Look da; zweiter Lauf überspringt alles; commit
 
 ### Task 5: References
 
 - `measure_video.py`: Länge, Schnittzeitpunkte (`scdet`), Schnitte pro Sekunde, Hook-Schnitte in 0–3 s.
 - Claude: eigene Exporte der letzten Monate messen, externe Videos über `social_intel` (Instagram, YouTube Shorts) suchen und nach Engagement relativ zur Account-Größe wählen, `REFERENCES.md` schreiben.
-- [ ] Test `measure_video` an einem erzeugten Testvideo mit bekannten Schnitten
-- [ ] `REFERENCES.md` für das Demo-Briefing, commit
+- [x] Test `measure_video` an einem erzeugten Testvideo mit bekannten Schnitten
+- [x] `REFERENCES.md` für das Demo-Briefing, commit
 
 ### Task 6: analyse_music.py
 
 librosa: Tempo und Beats, Taktanfang über die stärkste Phase im Viertakt, Abschnitte über Clustering auf taktsynchronen Merkmalen, Energie pro Takt, größter Energiesprung als Drop-Kandidat.
 
-- [ ] Test mit synthetischem 120-BPM-Klick mit betonter Eins: Tempo 120 ± 2, Taktlänge 2,0 s, Phase richtig
-- [ ] Implementieren, Tests grün, commit
+- [x] Test mit synthetischem 120-BPM-Klick mit betonter Eins: Tempo 120 ± 2, Taktlänge 2,0 s, Phase richtig
+- [x] Implementieren, Tests grün, commit
 
 ### Task 7: build_edit.py + Base Edit am Demo-Projekt
 
 - `validate_edit(edit, music_info)` (rein): V1 lückenlos und ohne Überlappung, Länge = Musiklänge, Musikschnitte auf Takten, Quellbereiche im Clip.
 - Neue Timeline `<Projekt>_vNN`, Abbruch wenn sie existiert. Spuren `V1`, `ALT 1`, `ALT 2`, Audio `MUSIK`, `O-TON`. Querformat in Hochkant per Zoom füllen. Marker für Grafikplätze. Look auf allen Clips, Neuladen-Kontrolle.
-- [ ] Tests für `validate_edit`
-- [ ] Artlist-Track zum Briefing wählen und laden, Musik analysieren, Schnittliste schreiben, Lauf, prüfen; commit
+- [x] Tests für `validate_edit`
+- [x] Artlist-Track zum Briefing wählen und laden, Musik analysieren, Schnittliste schreiben, Lauf, prüfen; commit
 
 ### Task 8: place_sound.py + Sound Design am Demo-Projekt
 
 - Kopie `<Projekt>_vNN_SD` per `DuplicateTimeline`, Abbruch wenn sie existiert. Audiospuren `SFX`, `ATMO`. Dateien unter `ASSETS\SFX`, Bin `SOUND DESIGN`. Fester Pegel `level_db`.
-- [ ] Test `validate_sound`
-- [ ] Sound-Liste schreiben (Kamera-Ton, Artlist-SFX), Lauf, Original-Version unverändert prüfen; commit
+- [x] Test `validate_sound`
+- [x] Sound-Liste schreiben (Kamera-Ton, Artlist-SFX), Lauf, Original-Version unverändert prüfen; commit
 
 ### Task 9: Skill-Anleitungen und Gesamttest
 
-- [ ] `selects.md`, `references.md`, `base-edit.md`, `sound-design.md`, `craft-editing.md`, `craft-sound.md`; Tabelle in `SKILL.md` aktualisieren
-- [ ] Frischer Agent: je eine Anfrage pro Unterfunktion routet richtig (nur lesen)
-- [ ] README im Repo, Obsidian-Notizen, push
+- [x] `selects.md`, `references.md`, `base-edit.md`, `sound-design.md`, `craft-editing.md`, `craft-sound.md`; Tabelle in `SKILL.md` aktualisieren
+- [x] Frischer Agent: je eine Anfrage pro Unterfunktion routet richtig (nur lesen)
+- [x] README im Repo, Obsidian-Notizen, push

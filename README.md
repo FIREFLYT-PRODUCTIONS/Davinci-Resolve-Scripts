@@ -46,6 +46,32 @@ python PROJEKT_SETUP.py "<Projektordner>" [--editor FELIX] [--dry-run] [--no-pro
 
 Exit-Codes: `0` sauber, `1` fertig mit Hinweisen, `2` Abbruch, `3` anderes Projekt offen, `4` Projekt existiert schon.
 
+## Edit: vom Projekt zur ersten Version
+
+Die Skripte in `edit\` führen ein aufgesetztes Projekt bis zur ersten Schnittversion mit Sound Design. Gedacht sind sie für den Claude-Skill `fireflyt-edit`: Claude trifft die Auswahl und schreibt sie als JSON, die Skripte messen und schreiben in Resolve. Sie laufen auch ohne Claude, wenn die JSON-Dateien da sind. Alles liegt in `<Projekt>\00 - <EDITOR>\CLAUDE\`.
+
+| Schritt | Skript | Liest | Schreibt |
+|---|---|---|---|
+| Takes messen | `analyse_takes.py` | Videos in `01 - SOURCE` | `SELECTS\takes.json`, Kontaktbilder |
+| Sprache | `transcribe.py` | `takes.json` | `SELECTS\transcripts.json` |
+| Selects umrechnen | `make_selects.py` | `SELECTS\selects_draft.json` | `SELECTS\selects.json` |
+| Selects setzen | `place_selects.py` | `selects.json` | Spur `SELECTS` in den Source-Timelines |
+| References messen | `measure_video.py` | eigene Exporte | Länge, Schnitte pro Sekunde |
+| Musik messen | `analyse_music.py` | Musikdatei | `EDIT\music_<name>.json` |
+| Base Edit | `build_edit.py` | `EDIT\vNN.json` | Timeline `<Projekt>_vNN` |
+| Sound Design | `place_sound.py` | `SOUND\vNN.json` | Kopie `<Projekt>_vNN_SD` |
+
+```
+python edit\build_edit.py "<Projektordner>" v01 [--editor FELIX] [--check]
+python edit\place_sound.py "<Projektordner>" v01 [--editor FELIX] [--check]
+```
+
+`--check` prüft nur die JSON-Datei, ohne Resolve. Exit-Codes wie beim Setup, `4` heißt hier: die Version bzw. die Kopie gibt es schon. Vorhandenes wird nie verändert. Source-Timelines bekommen nur die Spur `SELECTS` dazu, jeder Base Edit ist eine neue Timeline, Sound Design eine Kopie. Neue Clips bekommen `BASE NODE TREE` und die Color Group. Exportiert wird nichts.
+
+Tests ohne Resolve: `python -m unittest discover -s edit\tests`. Bauplan und JSON-Formate: `docs\superpowers\plans\2026-11-03-fireflyt-edit.md`.
+
+Zusätzlich gebraucht: `numpy`, `opencv-python`, `librosa`, `faster-whisper` (CUDA für die Transkription).
+
 ## Kameras
 
 Die Kamera kommt aus den Metadaten der Datei, das Bildprofil pro Clip. Neue Kameras werden in `BASE_PROJECT_SETUP.py` unter `CLIP_COLORS` und `MODEL_NAMES` eingetragen.
