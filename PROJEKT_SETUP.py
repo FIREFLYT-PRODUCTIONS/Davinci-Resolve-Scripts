@@ -90,6 +90,7 @@ class SetupError(Exception):
 
 
 LOG_LINES = []
+LOG_PLAN = {}  # gesetzt, sobald der Projektordner geprueft ist, damit auch ein Abbruch ein Log bekommt
 
 
 def log(msg=""):
@@ -695,6 +696,8 @@ def write_log(plan):
 def run(args):
     warnings = []
     plan = analyse(args.folder, args.editor.upper())
+    if not args.dry_run:
+        LOG_PLAN.update(plan)
     photos = sum(1 for files in plan["media"].values() for f in files if f.suffix.lower() in PHOTO_EXT)
     log("=" * 50)
     log("FIREFLYT – Projekt-Setup")
@@ -804,6 +807,8 @@ def main():
         return run(args)
     except SetupError as error:
         log(f"ABBRUCH: {error}")
+        if LOG_PLAN:
+            write_log(LOG_PLAN)
         return error.code
 
 
