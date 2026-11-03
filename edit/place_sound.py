@@ -7,7 +7,8 @@ bleibt unverändert. Alle Clips bekommen denselben festen, leisen Pegel; Mix und
 Ducking macht der Editor.
 
 Quellen: Originalton der Kamera (Take-MP4, Bereich per "in"/"dur"), Artlist-SFX
-und lizenzfreie Effekte. Effekt-Dateien liegen unter ASSETS\\SFX.
+und lizenzfreie Effekte. Effekt-Dateien liegen unter 00 - <EDITOR>\\ASSETS\\SOUND_FX, in Resolve im Bin
+01 - ASSETS\\SOUND_FX.
 
 USAGE:
   python place_sound.py "<Projektordner>" v01 [--editor FELIX] [--check]

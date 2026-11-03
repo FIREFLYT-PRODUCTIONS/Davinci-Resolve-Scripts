@@ -142,7 +142,7 @@ librosa: Tempo und Beats, Taktanfang über die stärkste Phase im Viertakt, Absc
 
 ### Task 8: place_sound.py + Sound Design am Demo-Projekt
 
-- Kopie `<Projekt>_vNN_SD` per `DuplicateTimeline`, Abbruch wenn sie existiert. Audiospuren `SFX`, `ATMO`. Dateien unter `ASSETS\SFX`, Bin `SOUND DESIGN`. Fester Pegel `level_db`.
+- Kopie `<Projekt>_vNN_SD` per `DuplicateTimeline`, Abbruch wenn sie existiert. Audiospuren `SFX`, `ATMO`. Dateien unter `00 - <EDITOR>\ASSETS\SOUND_FX`, Bin `01 - ASSETS\SOUND_FX`. Fester Pegel `level_db`.
 - [x] Test `validate_sound`
 - [x] Sound-Liste schreiben (Kamera-Ton, Artlist-SFX), Lauf, Original-Version unverändert prüfen; commit
 
